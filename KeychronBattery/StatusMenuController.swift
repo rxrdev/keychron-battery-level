@@ -14,6 +14,7 @@ class StatusMenuController: NSObject {
 
     private var store = DeviceStore()
     private var deviceMenuItems: [String: NSMenuItem] = [:]
+    private var launchItem: NSMenuItem!
     private weak var appDelegate: AppDelegate?
 
     init(appDelegate: AppDelegate) {
@@ -48,7 +49,7 @@ class StatusMenuController: NSObject {
         menu.addItem(NSMenuItem.separator())
 
         // Launch at Login Item
-        let launchItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchClicked(_:)), keyEquivalent: "")
+        launchItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchClicked(_:)), keyEquivalent: "")
         launchItem.target = self
         // Set initial state based on delegate's logic
         launchItem.state = (appDelegate?.isLaunchAtLoginEnabled() ?? false) ? .on : .off
@@ -59,6 +60,7 @@ class StatusMenuController: NSObject {
         // Quit Item
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
+        menu.delegate = self
         statusItem.menu = menu
     }
 
@@ -168,13 +170,14 @@ class StatusMenuController: NSObject {
     @objc private func toggleLaunchClicked(_ sender: NSMenuItem) {
         guard let delegate = appDelegate else { return }
 
-        if delegate.isLaunchAtLoginEnabled() {
+        if delegate.isLaunchAtLoginRegistered() {
             delegate.disableLaunchAtLogin()
-            sender.state = .off
         } else {
             delegate.enableLaunchAtLogin()
-            sender.state = .on
         }
+
+        // Show what macOS reports, not what was clicked, in case the call failed
+        sender.state = delegate.isLaunchAtLoginEnabled() ? .on : .off
     }
 
     @objc private func changeIconClicked(_ sender: NSMenuItem) {
@@ -186,5 +189,12 @@ class StatusMenuController: NSObject {
 
         rebuildDeviceMenuItems()
         updateMainStatusItem()
+    }
+}
+
+extension StatusMenuController: NSMenuDelegate {
+    // Login items can be changed in System Settings while the app runs
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        launchItem.state = (appDelegate?.isLaunchAtLoginEnabled() ?? false) ? .on : .off
     }
 }

@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'  # Triggers on version tags like v1.0.0, v1.2.3, etc.
+      - 'v*'  # Any v-tag; version-from-tag.sh rejects anything but vMAJOR.MINOR.PATCH
 
 permissions:
   contents: write
@@ -37,6 +37,7 @@ jobs:
           xcodebuild -project KeychronBattery.xcodeproj \
                      -scheme KeychronBattery \
                      -configuration Release \
+                     -destination 'generic/platform=macOS' \
                      -derivedDataPath ./build \
                      CODE_SIGN_IDENTITY="-" \
                      CODE_SIGNING_REQUIRED=YES \
@@ -56,10 +57,19 @@ jobs:
             echo "error: app version $BUILT does not match tag ${{ steps.get_version.outputs.VERSION }}"
             exit 1
           fi
-          if codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q get-task-allow; then
-            echo "error: Release build carries com.apple.security.get-task-allow"
-            exit 1
-          fi
+          ARCHS=$(lipo -archs "$APP/Contents/MacOS/KeychronBattery")
+          case "$ARCHS" in
+            *arm64*x86_64*|*x86_64*arm64*) ;;
+            *) echo "error: app is not universal (archs: $ARCHS)"; exit 1 ;;
+          esac
+          ENTITLEMENTS=$(codesign -d --entitlements - --xml "$APP")
+          case "$ENTITLEMENTS" in
+            *com.apple.security.app-sandbox*) ;;
+            *) echo "error: Release build is not sandboxed"; exit 1 ;;
+          esac
+          case "$ENTITLEMENTS" in
+            *get-task-allow*) echo "error: Release build carries com.apple.security.get-task-allow"; exit 1 ;;
+          esac
       
       - name: Install create-dmg
         run: brew install create-dmg

@@ -85,6 +85,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         SMAppService.mainApp.status == .enabled
     }
 
+    /// Registered, including when the user switched it off in System Settings
+    /// (`.requiresApproval`); unregistering is the only way out of that state.
+    func isLaunchAtLoginRegistered() -> Bool {
+        [.enabled, .requiresApproval].contains(SMAppService.mainApp.status)
+    }
+
     func enableLaunchAtLogin() {
         do {
             try SMAppService.mainApp.register()

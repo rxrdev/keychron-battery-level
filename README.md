@@ -22,14 +22,14 @@ A lightweight macOS menu bar application that displays the battery level of your
 ## Requirements
 
 - macOS 15.0 or later
-- Xcode 16.0 or later (for building)
+- Xcode 26.0 or later (for building)
 - A Keychron keyboard, or any Bluetooth device that reports its battery to macOS
 
 ## Installation
 
 ### Using Pre-built DMG
 
-1. Download `KeychronBattery.dmg` from the releases
+1. Download `KeychronBattery-vX.Y.Z.dmg` from the releases
 2. Open the DMG file
 3. Drag the app to your Applications folder
 4. Launch the app from Applications
@@ -59,7 +59,7 @@ The battery level updates automatically every 5 minutes and displays as:
 ### Prerequisites
 
 - macOS 15.0 or later
-- Xcode 16.0 or later
+- Xcode 26.0 or later
 - Apple Developer account (for code signing)
 
 ### Build Steps
@@ -108,7 +108,8 @@ xcodebuild -project KeychronBattery.xcodeproj -scheme KeychronBattery -configura
 
 For distribution:
 ```bash
-xcodebuild -project KeychronBattery.xcodeproj -scheme KeychronBattery -configuration Release -derivedDataPath ./build
+xcodebuild -project KeychronBattery.xcodeproj -scheme KeychronBattery -configuration Release \
+           -destination 'generic/platform=macOS' -derivedDataPath ./build
 ```
 
 The compiled app will be located at:
@@ -125,6 +126,7 @@ build/Build/Products/Release/KeychronBattery.app
    xcodebuild -project KeychronBattery.xcodeproj \
               -scheme KeychronBattery \
               -configuration Release \
+              -destination 'generic/platform=macOS' \
               -derivedDataPath ./build
    ```
 
@@ -146,6 +148,7 @@ build/Build/Products/Release/KeychronBattery.app
    xcodebuild -project KeychronBattery.xcodeproj \
               -scheme KeychronBattery \
               -configuration Release \
+              -destination 'generic/platform=macOS' \
               -derivedDataPath ./build
    ```
 
@@ -182,6 +185,7 @@ This method creates a more polished DMG with custom styling (requires `create-dm
    xcodebuild -project KeychronBattery.xcodeproj \
               -scheme KeychronBattery \
               -configuration Release \
+              -destination 'generic/platform=macOS' \
               -derivedDataPath ./build
    ```
 
@@ -293,7 +297,7 @@ KeychronBattery/
 ├── RegistryBatteryMonitor.swift    # Devices that publish BatteryPercent in the IORegistry
 ├── HIDManager.swift                # Wired Keychron raw HID (experimental)
 ├── Info.plist                      # App configuration and permissions
-├── KeychronBattery.entitlements    # Sandbox, Bluetooth and USB entitlements
+├── KeychronBattery.entitlements    # Bluetooth entitlement (sandbox and USB come from build settings)
 └── Assets.xcassets/                # App icons and menu bar icon
 ```
 
