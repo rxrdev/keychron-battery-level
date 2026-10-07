@@ -104,3 +104,19 @@ func tierThresholds(level: Int, tier: BatteryTier) {
     store.apply(BatteryReading(id: "ble-1", name: "Keychron K2 HE", level: 58))
     #expect(store.visibleDevices == [Device(id: "ble-1", name: "Keychron K2 HE", level: 58)])
 }
+
+@Test func batteryLevelBeatsWiredThatConnectedFirst() {
+    // App started with the keyboard on its cable, then it was switched to Bluetooth while charging
+    var store = DeviceStore()
+    store.apply(BatteryReading(id: "usb-1", name: "Keychron K2 HE", level: nil, isWired: true))
+    store.apply(BatteryReading(id: "ble-1", name: "Keychron K2 HE", level: 57))
+    #expect(store.visibleDevices == [Device(id: "ble-1", name: "Keychron K2 HE", level: 57)])
+}
+
+@Test func wiredShowsWhenBluetoothDropsWhilePluggedIn() {
+    var store = DeviceStore()
+    store.apply(BatteryReading(id: "ble-1", name: "Keychron K2 HE", level: 57))
+    store.apply(BatteryReading(id: "usb-1", name: "Keychron K2 HE", level: nil, isWired: true))
+    store.apply(BatteryReading(id: "ble-1", name: "Keychron K2 HE", level: nil))
+    #expect(store.visibleDevices == [Device(id: "usb-1", name: "Keychron K2 HE", level: nil, isWired: true)])
+}

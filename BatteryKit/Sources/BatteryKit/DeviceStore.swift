@@ -17,7 +17,7 @@ public struct DeviceStore {
     private struct Entry {
         var device: Device
         var sequence: Int
-        /// When this source last went from no level to a level; nil while disconnected
+        /// When this source last connected (got a level or a cable); nil while disconnected
         var connectedSince: Int?
     }
 

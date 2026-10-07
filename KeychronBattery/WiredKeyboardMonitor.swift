@@ -11,6 +11,10 @@ final class WiredKeyboardMonitor {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "dev.rrazvan.keychron.battery", category: "WiredKeyboardMonitor")
     private var notificationPort: IONotificationPortRef?
     private var iterators: [io_iterator_t] = []
+    private var tracker = WiredKeyboardTracker()
+
+    /// Called after a keyboard is unplugged; it usually reconnects over Bluetooth shortly after.
+    var onUnplug: (() -> Void)?
 
     func start() {
         guard let port = IONotificationPortCreate(kIOMainPortDefault) else {
@@ -46,6 +50,7 @@ final class WiredKeyboardMonitor {
     }
 
     private func handle(_ iterator: io_iterator_t, isAttached: Bool) {
+        var pairedNames: Set<String>?
         var service = IOIteratorNext(iterator)
         while service != 0 {
             defer {
@@ -53,22 +58,29 @@ final class WiredKeyboardMonitor {
                 service = IOIteratorNext(iterator)
             }
 
-            let vendorID = property(kUSBVendorID, of: service) as? Int ?? 0
-            let productName = property(kUSBProductString, of: service) as? String
-            let locationID = property(kUSBDevicePropertyLocationID, of: service) as? Int ?? 0
+            var entryID: UInt64 = 0
+            IORegistryEntryGetRegistryEntryID(service, &entryID)
 
-            // Names stay current in a long-running process; only IOBluetooth battery values go stale
-            let pairedNames = Set((IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice] ?? []).compactMap(\.name))
-            guard let reading = WiredKeyboard.reading(
-                vendorID: vendorID,
-                productName: productName,
-                locationID: locationID,
-                isAttached: isAttached,
-                pairedNames: pairedNames
-            ) else { continue }
+            if isAttached {
+                // Names stay current in a long-running process; only IOBluetooth battery values go stale
+                let names = pairedNames ?? Set((IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice] ?? []).compactMap(\.name))
+                pairedNames = names
+                guard let reading = WiredKeyboard.reading(
+                    vendorID: property(kUSBVendorID, of: service) as? Int ?? 0,
+                    productName: property(kUSBProductString, of: service) as? String,
+                    locationID: property(kUSBDevicePropertyLocationID, of: service) as? Int ?? 0,
+                    isAttached: true,
+                    pairedNames: names
+                ) else { continue }
 
-            logger.info("🔌 \(reading.name, privacy: .public) \(isAttached ? "plugged in" : "unplugged", privacy: .public)")
-            NotificationCenter.default.post(name: .didUpdateBatteryReading, object: reading)
+                tracker.attached(entryID: entryID, reading: reading)
+                logger.info("🔌 \(reading.name, privacy: .public) plugged in")
+                NotificationCenter.default.post(name: .didUpdateBatteryReading, object: reading)
+            } else if let reading = tracker.detached(entryID: entryID) {
+                logger.info("🔌 \(reading.name, privacy: .public) unplugged")
+                NotificationCenter.default.post(name: .didUpdateBatteryReading, object: reading)
+                onUnplug?()
+            }
         }
     }
 
