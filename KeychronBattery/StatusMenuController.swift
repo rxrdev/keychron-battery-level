@@ -68,8 +68,8 @@ class StatusMenuController: NSObject {
         updateMainStatusItem()
     }
 
-    private func iconName(for id: String) -> String {
-        UserDefaults.standard.string(forKey: "icon_\(id)") ?? "keyboard"
+    private func iconName(for device: Device) -> String {
+        IconPreference.lookupKeys(for: device).lazy.compactMap { UserDefaults.standard.string(forKey: $0) }.first ?? "keyboard"
     }
 
     private func rebuildDeviceMenuItems() {
@@ -82,7 +82,7 @@ class StatusMenuController: NSObject {
         var index = menu.items.firstIndex(where: { $0.isSeparatorItem }) ?? 0
 
         for device in store.visibleDevices {
-            let icon = iconName(for: device.id)
+            let icon = iconName(for: device)
             let level = device.level.map { "\($0)%" } ?? "Disconnected"
             let item = NSMenuItem(title: "\(iconForName(icon)) \(device.name): \(level)", action: nil, keyEquivalent: "")
 
@@ -90,7 +90,7 @@ class StatusMenuController: NSObject {
             for (iconKey, iconLabel) in Self.iconChoices {
                 let iconItem = NSMenuItem(title: iconLabel, action: #selector(changeIconClicked(_:)), keyEquivalent: "")
                 iconItem.target = self
-                iconItem.representedObject = ["uuid": device.id, "icon": iconKey]
+                iconItem.representedObject = ["key": IconPreference.storageKey(for: device), "icon": iconKey]
                 iconItem.state = (icon == iconKey) ? .on : .off
                 submenu.addItem(iconItem)
             }
@@ -106,7 +106,7 @@ class StatusMenuController: NSObject {
         guard let button = statusItem.button else { return }
 
         let activeDevices = store.visibleDevices.compactMap { device in
-            device.level.map { (device: device, level: $0, icon: iconForName(iconName(for: device.id))) }
+            device.level.map { (device: device, level: $0, icon: iconForName(iconName(for: device))) }
         }
 
         // Set tooltip to show all devices on hover
@@ -179,10 +179,10 @@ class StatusMenuController: NSObject {
 
     @objc private func changeIconClicked(_ sender: NSMenuItem) {
         guard let data = sender.representedObject as? [String: String],
-              let uuid = data["uuid"],
+              let key = data["key"],
               let icon = data["icon"] else { return }
 
-        UserDefaults.standard.set(icon, forKey: "icon_\(uuid)")
+        UserDefaults.standard.set(icon, forKey: key)
 
         rebuildDeviceMenuItems()
         updateMainStatusItem()

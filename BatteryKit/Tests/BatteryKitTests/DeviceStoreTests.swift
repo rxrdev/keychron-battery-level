@@ -16,18 +16,19 @@ import Testing
 
 @Test func outOfRangeLevelIsTreatedAsUnknown() {
     var store = DeviceStore()
+    store.apply(BatteryReading(id: "a", name: "Mouse", level: 80))
     store.apply(BatteryReading(id: "a", name: "Mouse", level: 255))
     store.apply(BatteryReading(id: "b", name: "Pad", level: -3))
-    #expect(store.visibleDevices.map(\.level) == [nil, nil])
+    #expect(store.visibleDevices == [Device(id: "a", name: "Mouse", level: nil)])
 }
 
 @Test func sameNameFromTwoSourcesShowsOnce() {
     var store = DeviceStore()
     store.apply(BatteryReading(id: "ble-1", name: "Keychron K3", level: 70))
     store.apply(BatteryReading(id: "registry-x", name: "Keychron K3", level: 72))
-    #expect(store.visibleDevices == [Device(id: "registry-x", name: "Keychron K3", level: 72)])
-    store.apply(BatteryReading(id: "registry-x", name: "Keychron K3", level: nil))
     #expect(store.visibleDevices == [Device(id: "ble-1", name: "Keychron K3", level: 70)])
+    store.apply(BatteryReading(id: "ble-1", name: "Keychron K3", level: nil))
+    #expect(store.visibleDevices == [Device(id: "registry-x", name: "Keychron K3", level: 72)])
 }
 
 @Test func visibleDevicesAreSortedByName() {
@@ -52,5 +53,20 @@ func tierThresholds(level: Int, tier: BatteryTier) {
 @Test func emptyNameForUnknownIdIsIgnored() {
     var store = DeviceStore()
     store.apply(BatteryReading(id: "a", name: "", level: nil))
+    #expect(store.visibleDevices.isEmpty)
+}
+
+@Test func shownSourceStaysWhileConnected() {
+    var store = DeviceStore()
+    store.apply(BatteryReading(id: "ble-1", name: "Keychron K3", level: 70))
+    store.apply(BatteryReading(id: "registry-x", name: "Keychron K3", level: 72))
+    store.apply(BatteryReading(id: "ble-1", name: "Keychron K3", level: 69))
+    store.apply(BatteryReading(id: "registry-x", name: "Keychron K3", level: 71))
+    #expect(store.visibleDevices == [Device(id: "ble-1", name: "Keychron K3", level: 69)])
+}
+
+@Test func nilReadingForUnknownIdIsIgnored() {
+    var store = DeviceStore()
+    store.apply(BatteryReading(id: "hid-1", name: "Keychron Q1", level: nil))
     #expect(store.visibleDevices.isEmpty)
 }
