@@ -15,7 +15,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "dev.rrazvan.keychron.battery", category: "AppDelegate")
 
     let bluetoothMonitor = BluetoothBatteryMonitor()
-    let hidManager = HIDManager()
+    let wiredMonitor = WiredKeyboardMonitor()
     let registryMonitor = RegistryBatteryMonitor()
     let classicMonitor = ClassicBatteryMonitor()
 
@@ -49,6 +49,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             self.bluetoothMonitor.start()
             self.classicMonitor.start()
+            self.wiredMonitor.start()
             self.scheduleStartupRetries()
         }
 
@@ -76,7 +77,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func refresh() {
         logger.info("Refreshing battery status...")
         bluetoothMonitor.requestBatteryUpdate()
-        hidManager.requestBatteryUpdate()
         registryMonitor.requestBatteryUpdate()
         classicMonitor.requestBatteryUpdate()
     }
