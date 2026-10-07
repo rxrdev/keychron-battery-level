@@ -6,15 +6,18 @@ extension Notification.Name {
 }
 
 /// One battery report from any source. A `nil` level means disconnected or unknown.
+/// `isWired` marks a device on a USB cable, which reports no battery level.
 public struct BatteryReading: Equatable, Sendable {
     public let id: String
     public let name: String
     public let level: Int?
+    public let isWired: Bool
 
-    public init(id: String, name: String, level: Int?) {
+    public init(id: String, name: String, level: Int?, isWired: Bool = false) {
         self.id = id
         self.name = name
         self.level = level
+        self.isWired = isWired
     }
 }
 

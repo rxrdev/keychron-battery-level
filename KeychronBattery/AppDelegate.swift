@@ -15,13 +15,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "dev.rrazvan.keychron.battery", category: "AppDelegate")
 
     let bluetoothMonitor = BluetoothBatteryMonitor()
-    let hidManager = HIDManager()
+    let wiredMonitor = WiredKeyboardMonitor()
     let registryMonitor = RegistryBatteryMonitor()
     let classicMonitor = ClassicBatteryMonitor()
 
     var statusMenuController: StatusMenuController?
-
-    private var startupRetryCount = 0
 
     static func main() {
         if CommandLine.arguments.contains(ClassicBatteryMonitor.snapshotArgument) {
@@ -41,7 +39,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         NotificationCenter.default.addObserver(forName: .didUpdateBatteryReading, object: nil, queue: .main) { [weak self] notification in
             if let reading = notification.object as? BatteryReading {
-                self?.logger.info("Received battery update for \(reading.name): \(reading.level.map { "\($0)%" } ?? "disconnected")")
+                self?.logger.info("Received battery update for \(reading.name): \(reading.level.map { "\($0)%" } ?? (reading.isWired ? "USB" : "disconnected"))")
                 self?.statusMenuController?.apply(reading)
             }
         }
@@ -49,7 +47,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             self.bluetoothMonitor.start()
             self.classicMonitor.start()
-            self.scheduleStartupRetries()
+            self.wiredMonitor.onUnplug = { [weak self] in
+                // A keyboard taken off its cable usually comes back over Bluetooth within a minute
+                self?.scheduleRetries(count: 6, reason: "Unplug")
+            }
+            self.wiredMonitor.start()
+            // The first 2 minutes catch devices connecting after boot
+            self.scheduleRetries(count: 12, reason: "Startup")
         }
 
         Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
@@ -57,17 +61,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func scheduleStartupRetries() {
-        // Retry every 10 seconds for the first 2 minutes (12 times) to catch devices connecting after boot
+    /// Refreshes every 10 seconds, `count` times, to catch devices that connect a little later.
+    private func scheduleRetries(count: Int, reason: String) {
+        var attempt = 0
         Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] timer in
-            guard let self = self else { return }
-            self.startupRetryCount += 1
+            guard let self else { return timer.invalidate() }
+            attempt += 1
 
-            if self.startupRetryCount > 12 {
+            if attempt > count {
                 timer.invalidate()
-                self.logger.info("Startup retries finished.")
+                self.logger.info("\(reason, privacy: .public) retries finished.")
             } else {
-                self.logger.info("Startup retry #\(self.startupRetryCount)")
+                self.logger.info("\(reason, privacy: .public) retry #\(attempt)")
                 self.refresh()
             }
         }
@@ -76,7 +81,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func refresh() {
         logger.info("Refreshing battery status...")
         bluetoothMonitor.requestBatteryUpdate()
-        hidManager.requestBatteryUpdate()
         registryMonitor.requestBatteryUpdate()
         classicMonitor.requestBatteryUpdate()
     }

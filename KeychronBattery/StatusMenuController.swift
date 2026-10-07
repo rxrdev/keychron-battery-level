@@ -85,8 +85,8 @@ class StatusMenuController: NSObject {
 
         for device in store.visibleDevices {
             let icon = iconName(for: device)
-            let level = device.level.map { "\($0)%" } ?? "Disconnected"
-            let item = NSMenuItem(title: "\(iconForName(icon)) \(device.name): \(level)", action: nil, keyEquivalent: "")
+            let status = statusText(for: device) ?? "Disconnected"
+            let item = NSMenuItem(title: "\(iconForName(icon)) \(device.name): \(status)", action: nil, keyEquivalent: "")
 
             let submenu = NSMenu()
             for (iconKey, iconLabel) in Self.iconChoices {
@@ -108,11 +108,11 @@ class StatusMenuController: NSObject {
         guard let button = statusItem.button else { return }
 
         let activeDevices = store.visibleDevices.compactMap { device in
-            device.level.map { (device: device, level: $0, icon: iconForName(iconName(for: device))) }
+            statusText(for: device).map { (device: device, status: $0, icon: iconForName(iconName(for: device))) }
         }
 
         // Set tooltip to show all devices on hover
-        let tooltipLines = activeDevices.map { "\($0.icon) \($0.device.name): \($0.level)%" }
+        let tooltipLines = activeDevices.map { "\($0.icon) \($0.device.name): \($0.status)" }
         button.toolTip = tooltipLines.isEmpty ? nil : tooltipLines.joined(separator: "\n")
 
         if activeDevices.isEmpty {
@@ -135,10 +135,10 @@ class StatusMenuController: NSObject {
             }
 
             let color: NSColor
-            switch BatteryTier(level: active.level) {
+            switch active.device.level.map(BatteryTier.init(level:)) {
             case .critical: color = .systemRed
             case .low:      color = .systemOrange
-            case .normal:   color = .labelColor
+            case .normal, nil: color = .labelColor
             }
 
             let attributes: [NSAttributedString.Key: Any] = [
@@ -146,11 +146,17 @@ class StatusMenuController: NSObject {
                 .font: NSFont.menuBarFont(ofSize: 0)
             ]
 
-            fullAttributedTitle.append(NSAttributedString(string: "\(active.icon) \(active.level)%", attributes: attributes))
+            fullAttributedTitle.append(NSAttributedString(string: "\(active.icon) \(active.status)", attributes: attributes))
         }
 
         button.image = nil // Clear image to rely on emoji in text
         button.attributedTitle = fullAttributedTitle
+    }
+
+    /// "57%", or "USB" for a keyboard on its cable (no battery reading there); nil when disconnected.
+    private func statusText(for device: Device) -> String? {
+        if let level = device.level { return "\(level)%" }
+        return device.isWired ? "USB" : nil
     }
 
     private func iconForName(_ name: String) -> String {

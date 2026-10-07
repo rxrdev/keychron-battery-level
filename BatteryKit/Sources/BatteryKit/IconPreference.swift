@@ -1,5 +1,5 @@
 /// UserDefaults keys for a device's menu bar icon. Keyed by name, because one
-/// physical device can arrive under several source ids (BLE, IORegistry, HID).
+/// physical device can arrive under several source ids (BLE, IOBluetooth, IORegistry, USB).
 public enum IconPreference {
     public static func storageKey(for device: Device) -> String {
         "icon_name_\(device.name)"
