@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "BatteryKit",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v15)],
     products: [
         .library(name: "BatteryKit", targets: ["BatteryKit"])
     ],

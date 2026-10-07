@@ -82,74 +82,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func isLaunchAtLoginEnabled() -> Bool {
-        if #available(macOS 13.0, *) {
-            return SMAppService.mainApp.status == .enabled
-        }
-
-        guard let bundleId = Bundle.main.bundleIdentifier else { return false }
-
-        // Fallback for older macOS: Check launchctl list
-        let task = Process()
-        task.launchPath = "/bin/launchctl"
-        task.arguments = ["list"]
-
-        let pipe = Pipe()
-        task.standardOutput = pipe
-
-        do {
-            try task.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let output = String(data: data, encoding: .utf8) {
-                return output.contains(bundleId)
-            }
-        } catch {
-            logger.error("Failed to check launchctl: \(error.localizedDescription)")
-        }
-
-        return false
+        SMAppService.mainApp.status == .enabled
     }
 
     func enableLaunchAtLogin() {
-        guard let bundleId = Bundle.main.bundleIdentifier else { return }
-
-        if #available(macOS 13.0, *) {
-            // Use modern API for macOS 13+
-            do {
-                try SMAppService.mainApp.register()
-                logger.info("✅ Enabled launch at login")
-            } catch {
-                logger.error("❌ Failed to enable launch at login: \(error.localizedDescription)")
-            }
-        } else {
-            // Fallback for older macOS
-            let success = SMLoginItemSetEnabled(bundleId as CFString, true)
-            if success {
-                logger.info("✅ Enabled launch at login")
-            } else {
-                logger.error("❌ Failed to enable launch at login")
-            }
+        do {
+            try SMAppService.mainApp.register()
+            logger.info("✅ Enabled launch at login")
+        } catch {
+            logger.error("❌ Failed to enable launch at login: \(error.localizedDescription)")
         }
     }
 
     func disableLaunchAtLogin() {
-        guard let bundleId = Bundle.main.bundleIdentifier else { return }
-
-        if #available(macOS 13.0, *) {
-            // Use modern API for macOS 13+
-            do {
-                try SMAppService.mainApp.unregister()
-                logger.info("✅ Disabled launch at login")
-            } catch {
-                logger.error("❌ Failed to disable launch at login: \(error.localizedDescription)")
-            }
-        } else {
-            // Fallback for older macOS
-            let success = SMLoginItemSetEnabled(bundleId as CFString, false)
-            if success {
-                logger.info("✅ Disabled launch at login")
-            } else {
-                logger.error("❌ Failed to disable launch at login")
-            }
+        do {
+            try SMAppService.mainApp.unregister()
+            logger.info("✅ Disabled launch at login")
+        } catch {
+            logger.error("❌ Failed to disable launch at login: \(error.localizedDescription)")
         }
     }
 }
