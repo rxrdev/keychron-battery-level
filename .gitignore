@@ -1,2 +1,8 @@
 build
 *.DS_Store
+.build
+*.dmg
+*.backup
+xcuserdata/
+*.swp
+build-debug

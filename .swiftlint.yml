@@ -4,7 +4,9 @@ disabled_rules:
 
 included:
   - KeychronBattery
+  - BatteryKit
 
 excluded:
   - DerivedData
+  - BatteryKit/.build
 
