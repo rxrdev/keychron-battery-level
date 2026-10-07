@@ -1,10 +1,7 @@
+import BatteryKit
 import Foundation
 import IOKit.hid
 import os
-
-extension Notification.Name {
-    static let didReceiveBatteryLevel = Notification.Name("didReceiveBatteryLevel")
-}
 
 // MARK: - Battery Command Model
 private struct BatteryCommand {
@@ -195,7 +192,10 @@ class HIDManager {
                 }
 
                 DispatchQueue.main.async {
-                    NotificationCenter.default.post(name: .didReceiveBatteryLevel, object: battery)
+                    NotificationCenter.default.post(
+                        name: .didUpdateBatteryReading,
+                        object: BatteryReading(id: "HID-DEVICE-001", name: "Wired/HID Device", level: battery)
+                    )
                 }
             }
         }

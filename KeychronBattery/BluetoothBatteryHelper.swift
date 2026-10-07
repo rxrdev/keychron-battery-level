@@ -1,10 +1,7 @@
-import Foundation
+import BatteryKit
 import CoreBluetooth
+import Foundation
 import os
-
-extension Notification.Name {
-    static let didUpdateBluetoothBattery = Notification.Name("didUpdateBluetoothBattery")
-}
 
 class BluetoothBatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "dev.rrazvan.keychron.battery", category: "BluetoothMonitor")
@@ -84,7 +81,7 @@ class BluetoothBatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralD
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         logger.info("❌ Disconnected from \(peripheral.name ?? "device")")
         connectedPeripherals.removeValue(forKey: peripheral.identifier)
-        notifyBatteryUpdate(uuid: peripheral.identifier.uuidString, name: peripheral.name ?? "Unknown", level: -1)
+        notifyBatteryUpdate(uuid: peripheral.identifier.uuidString, name: peripheral.name ?? "Unknown", level: nil)
 
         // Try to reconnect
         centralManager.connect(peripheral, options: nil)
@@ -155,17 +152,11 @@ class BluetoothBatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralD
         centralManager.connect(peripheral, options: nil)
     }
 
-    private func notifyBatteryUpdate(uuid: String, name: String, level: Int) {
+    private func notifyBatteryUpdate(uuid: String, name: String, level: Int?) {
         DispatchQueue.main.async {
-            let userInfo: [String: Any] = [
-                "uuid": uuid,
-                "name": name,
-                "level": level
-            ]
             NotificationCenter.default.post(
-                name: .didUpdateBluetoothBattery,
-                object: nil,
-                userInfo: userInfo
+                name: .didUpdateBatteryReading,
+                object: BatteryReading(id: uuid, name: name, level: level)
             )
         }
     }

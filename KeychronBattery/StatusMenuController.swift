@@ -1,16 +1,18 @@
+import BatteryKit
 import Cocoa
 
 class StatusMenuController: NSObject {
     private var statusItem: NSStatusItem!
     private let batteryIconSize = NSSize(width: 18, height: 18)
 
-    private struct DeviceInfo {
-        let name: String
-        var level: Int
-        var iconName: String
-    }
+    private static let iconChoices = [
+        ("keyboard", "Keyboard"),
+        ("mouse", "Mouse"),
+        ("gamecontroller", "Gamepad"),
+        ("headphones", "Headphones")
+    ]
 
-    private var devices: [String: DeviceInfo] = [:]
+    private var store = DeviceStore()
     private var deviceMenuItems: [String: NSMenuItem] = [:]
     private weak var appDelegate: AppDelegate?
 
@@ -60,62 +62,59 @@ class StatusMenuController: NSObject {
         statusItem.menu = menu
     }
 
-    func updateBatteryDisplay(uuid: String, name: String, level: Int) {
-        guard statusItem.button != nil else { return }
-
-        // Load saved icon preference or default to keyboard
-        let savedIcon = UserDefaults.standard.string(forKey: "icon_\(uuid)") ?? "keyboard"
-
-        devices[uuid] = DeviceInfo(name: name, level: level, iconName: savedIcon)
-        updateDeviceMenuItem(uuid: uuid)
+    func apply(_ reading: BatteryReading) {
+        store.apply(reading)
+        rebuildDeviceMenuItems()
         updateMainStatusItem()
     }
 
-    private func updateDeviceMenuItem(uuid: String) {
-        guard let info = devices[uuid], let menu = statusItem.menu else { return }
+    private func iconName(for id: String) -> String {
+        UserDefaults.standard.string(forKey: "icon_\(id)") ?? "keyboard"
+    }
 
-        let title = "\(iconForName(info.iconName)) \(info.name): \(info.level >= 0 ? "\(info.level)%" : "Disconnected")"
+    private func rebuildDeviceMenuItems() {
+        guard let menu = statusItem.menu else { return }
 
-        if let existingItem = deviceMenuItems[uuid] {
-            existingItem.title = title
-        } else {
-            // Create new item
-            let newItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-            newItem.indentationLevel = 0
+        deviceMenuItems.values.forEach(menu.removeItem)
+        deviceMenuItems.removeAll()
 
-            // Add Icon Submenu
+        // Device items go between Refresh and the first separator, sorted by name
+        var index = menu.items.firstIndex(where: { $0.isSeparatorItem }) ?? 0
+
+        for device in store.visibleDevices {
+            let icon = iconName(for: device.id)
+            let level = device.level.map { "\($0)%" } ?? "Disconnected"
+            let item = NSMenuItem(title: "\(iconForName(icon)) \(device.name): \(level)", action: nil, keyEquivalent: "")
+
             let submenu = NSMenu()
-            let icons = ["keyboard": "Keyboard", "mouse": "Mouse", "gamecontroller": "Gamepad", "headphones": "Headphones"]
-
-            for (iconKey, iconLabel) in icons {
+            for (iconKey, iconLabel) in Self.iconChoices {
                 let iconItem = NSMenuItem(title: iconLabel, action: #selector(changeIconClicked(_:)), keyEquivalent: "")
                 iconItem.target = self
-                iconItem.representedObject = ["uuid": uuid, "icon": iconKey]
-                iconItem.state = (info.iconName == iconKey) ? .on : .off
+                iconItem.representedObject = ["uuid": device.id, "icon": iconKey]
+                iconItem.state = (icon == iconKey) ? .on : .off
                 submenu.addItem(iconItem)
             }
+            item.submenu = submenu
 
-            newItem.submenu = submenu
-
-            // Insert before the first separator (keeping Refresh/Quit at bottom)
-            let index = menu.items.firstIndex(where: { $0.isSeparatorItem }) ?? 0
-            menu.insertItem(newItem, at: index)
-            deviceMenuItems[uuid] = newItem
+            menu.insertItem(item, at: index)
+            index += 1
+            deviceMenuItems[device.id] = item
         }
     }
 
     private func updateMainStatusItem() {
         guard let button = statusItem.button else { return }
 
-        // Get all active devices sorted by name
-        let activeDevices = devices.values.filter { $0.level >= 0 }.sorted(by: { $0.name < $1.name })
+        let activeDevices = store.visibleDevices.compactMap { device in
+            device.level.map { (device: device, level: $0, icon: iconForName(iconName(for: device.id))) }
+        }
 
         // Set tooltip to show all devices on hover
-        let tooltipLines = activeDevices.map { "\(iconForName($0.iconName)) \($0.name): \($0.level)%" }
+        let tooltipLines = activeDevices.map { "\($0.icon) \($0.device.name): \($0.level)%" }
         button.toolTip = tooltipLines.isEmpty ? nil : tooltipLines.joined(separator: "\n")
 
         if activeDevices.isEmpty {
-            button.title = " --%"
+            button.attributedTitle = NSAttributedString(string: " --%")
             // Reset to default icon if no devices
             if let customIcon = NSImage(named: "MenuBarIcon") {
                 customIcon.isTemplate = true
@@ -128,17 +127,16 @@ class StatusMenuController: NSObject {
         // Build attributed string with all devices
         let fullAttributedTitle = NSMutableAttributedString()
 
-        for (index, device) in activeDevices.enumerated() {
+        for (index, active) in activeDevices.enumerated() {
             if index > 0 {
                 fullAttributedTitle.append(NSAttributedString(string: "  ", attributes: [.font: NSFont.menuBarFont(ofSize: 0)]))
             }
 
             let color: NSColor
-            switch device.level {
-            case ..<0:    color = .labelColor
-            case 0...10:  color = .systemRed
-            case 11...30: color = .systemOrange
-            default:      color = .labelColor
+            switch BatteryTier(level: active.level) {
+            case .critical: color = .systemRed
+            case .low:      color = .systemOrange
+            case .normal:   color = .labelColor
             }
 
             let attributes: [NSAttributedString.Key: Any] = [
@@ -146,8 +144,7 @@ class StatusMenuController: NSObject {
                 .font: NSFont.menuBarFont(ofSize: 0)
             ]
 
-            let text = "\(iconForName(device.iconName)) \(device.level)%"
-            fullAttributedTitle.append(NSAttributedString(string: text, attributes: attributes))
+            fullAttributedTitle.append(NSAttributedString(string: "\(active.icon) \(active.level)%", attributes: attributes))
         }
 
         button.image = nil // Clear image to rely on emoji in text
@@ -187,15 +184,7 @@ class StatusMenuController: NSObject {
 
         UserDefaults.standard.set(icon, forKey: "icon_\(uuid)")
 
-        // Update model
-        if var info = devices[uuid] {
-            info.iconName = icon
-            devices[uuid] = info
-            updateDeviceMenuItem(uuid: uuid)
-            updateMainStatusItem()
-        }
-
-        sender.menu?.items.forEach { $0.state = .off }
-        sender.state = .on
+        rebuildDeviceMenuItems()
+        updateMainStatusItem()
     }
 }
