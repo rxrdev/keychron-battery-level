@@ -18,6 +18,8 @@ class HIDManager {
     private let reportSize = 64 // K2 HE uses 64-byte reports
     private var deviceBuffers: [IOHIDDevice: UnsafeMutablePointer<UInt8>] = [:] // Keep buffers alive
     private var rawHIDDevice: IOHIDDevice?
+    private var rawHIDReadingID = ""
+    private var rawHIDName = ""
     private var isSearchingForBattery = false
 
     private let commandSequence: [BatteryCommand] = [
@@ -135,6 +137,12 @@ class HIDManager {
     private func setupReceiver(device: IOHIDDevice) {
         rawHIDDevice = device
 
+        let locationID = IOHIDDeviceGetProperty(device, kIOHIDLocationIDKey as CFString) as? Int
+            ?? IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? Int
+            ?? 0
+        rawHIDReadingID = "hid-\(locationID)"
+        rawHIDName = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String ?? "Keychron (wired)"
+
         // Open the device directly
         let openResult = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone))
         let resultString = openResult == kIOReturnSuccess ? "Success" : "Failed (\(openResult))"
@@ -179,26 +187,16 @@ class HIDManager {
         let hexString = data.map { String(format: "%02X", $0) }.joined(separator: " ")
         logger.debug("📥 HID Data Received (\(reportLength) bytes): \(hexString)")
 
-        // Keychron can send battery info with different formats, check for common patterns
-        if reportLength >= 3 {
-            if data[0] == 0x02 && data[2] > 0 && data[2] <= 100 {
-                let battery = Int(data[2])
+        guard let battery = HIDBatteryParser.level(fromReport: Array(data), scanInProgress: isSearchingForBattery) else { return }
 
-                // ✅ SUCCESS!
-                // Stop the retry loop immediately so we don't spam more commands
-                if isSearchingForBattery {
-                    logger.info("✅ Battery found (\(battery)%). Stopping scan sequence.")
-                    isSearchingForBattery = false
-                }
+        // Stop the retry loop immediately so we don't spam more commands
+        logger.info("✅ Battery found (\(battery)%). Stopping scan sequence.")
+        isSearchingForBattery = false
 
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(
-                        name: .didUpdateBatteryReading,
-                        object: BatteryReading(id: "HID-DEVICE-001", name: "Wired/HID Device", level: battery)
-                    )
-                }
-            }
-        }
+        NotificationCenter.default.post(
+            name: .didUpdateBatteryReading,
+            object: BatteryReading(id: rawHIDReadingID, name: rawHIDName, level: battery)
+        )
     }
 
     private func handleInputValue(value: IOHIDValue) {
@@ -219,8 +217,13 @@ class HIDManager {
             deviceBuffers.removeValue(forKey: device)
         }
 
-        // 2. If this was our active device, clear it
+        // 2. If this was our active device, report it gone and clear it
         if rawHIDDevice == device {
+            NotificationCenter.default.post(
+                name: .didUpdateBatteryReading,
+                object: BatteryReading(id: rawHIDReadingID, name: rawHIDName, level: nil)
+            )
+            isSearchingForBattery = false
             rawHIDDevice = nil
         }
     }
@@ -245,7 +248,7 @@ class HIDManager {
         let icon = success ? "📤" : "⚠️"
         logger.debug("\(icon) Trying [\(index + 1)/\(totalCommands)]: \(command.description)")
 
-        DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 1.2) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
             guard let self = self else { return }
             self.executeCommandStep(device: device, index: index + 1)
         }
