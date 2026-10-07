@@ -368,3 +368,44 @@ Launch the app and wait for the K2 HE level. Switch the keyboard off. Expected: 
 git add KeychronBattery/BluetoothBatteryHelper.swift
 git commit -m "fix: keep Bluetooth peripherals tracked across disconnects"
 ```
+
+---
+
+### Task 5: IOBluetooth battery source (Bluetooth Classic headsets and keyboards)
+
+Added after Task 4. With Galaxy Buds2 connected, `system_profiler` shows `Battery Level: 100%`, but the IORegistry has no `BatteryPercent` for them. A probe found the value on `IOBluetoothDevice.batteryPercentSingle` (undocumented; 0 means no data, LE devices read 0). The K3 V2 is Bluetooth Classic too, so this is the likelier home of its level.
+
+**Files:**
+- Create: `BatteryKit/Sources/BatteryKit/ClassicBatteryParser.swift`
+- Create: `BatteryKit/Tests/BatteryKitTests/ClassicBatteryParserTests.swift`
+- Create: `KeychronBattery/ClassicBatteryMonitor.swift`
+- Modify: `KeychronBattery/AppDelegate.swift` (own the monitor, call it from `refresh()`)
+
+**Interfaces:**
+- Consumes: `BatteryReading`, `.didUpdateBatteryReading` (Task 1).
+- Produces:
+  - `public struct ClassicDevice: Sendable { public let address: String; public let name: String; public let isConnected: Bool; public let batteryPercent: Int; public init(...) }`
+  - `public enum ClassicBatteryParser { public static func readings(from devices: [ClassicDevice], previousIDs: Set<String>) -> [BatteryReading] }`
+  - `final class ClassicBatteryMonitor { func requestBatteryUpdate() }`
+
+- [ ] **Step 1: Write the failing tests in `ClassicBatteryParserTests.swift`**
+
+```swift
+let buds = ClassicDevice(address: "84-5f-04-f1-4f-69", name: "Galaxy Buds2 (4F69)", isConnected: true, batteryPercent: 100)
+
+@Test func readsConnectedDeviceWithBattery() {
+    #expect(ClassicBatteryParser.readings(from: [buds], previousIDs: []) ==
+            [BatteryReading(id: "classic-84-5f-04-f1-4f-69", name: "Galaxy Buds2 (4F69)", level: 100)])
+}
+@Test func zeroPercentMeansNoDataAndIsSkipped()        // LE devices (K2 HE, MX Master) report 0
+@Test func disconnectedDeviceIsSkipped()
+@Test func vanishedDeviceReportsDisconnected()         // previousIDs has it, devices doesn't → level nil, name ""
+@Test func disconnectedDeviceSeenBeforeReportsDisconnected()
+```
+
+- [ ] **Step 2: Run `swift test --package-path BatteryKit`** — Expected: `cannot find 'ClassicDevice' in scope`.
+- [ ] **Step 3: Implement `ClassicBatteryParser.readings`** — keep connected devices with `batteryPercent` in `1...100`; id `classic-<address>`; ids in `previousIDs` not produced this time get `BatteryReading(id:, name: "", level: nil)`.
+- [ ] **Step 4: Run `swift test --package-path BatteryKit`** — Expected: all pass.
+- [ ] **Step 5: Implement `ClassicBatteryMonitor`** — iterate `IOBluetoothDevice.pairedDevices()`, read `batteryPercentSingle` via KVC only when `responds(to:)` the selector (undocumented property; absent → skip), post each reading, keep ids with a level as next `previousIDs`. `AppDelegate` calls it from `refresh()`.
+- [ ] **Step 6: Build and check** — app build command; launch; expected: menu shows `Galaxy Buds2 (4F69): 100%`, K2 HE and MX Master appear once each, no Sandbox denials for the pid.
+- [ ] **Step 7: Commit** — `feat: read battery levels of Bluetooth Classic devices via IOBluetooth`
