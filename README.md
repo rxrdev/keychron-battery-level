@@ -14,9 +14,9 @@ A lightweight macOS menu bar application that displays the battery level of your
 - 🎨 **Color-coded Display** - Battery level changes color (red ≤10%, orange ≤30%, default >30%)
 - 🔄 **Auto-refresh** - Updates battery level every 5 minutes automatically
 - 🚀 **Launch at Login** - Optional setting to start the app automatically when you log in
-- 📡 **Bluetooth & HID** - Uses CoreBluetooth and IOKit (HID) to communicate with devices
+- 📡 **Bluetooth** - Uses CoreBluetooth, IOBluetooth and the IORegistry to read battery levels macOS already has
 - 🎧 **Bluetooth Classic Devices** - Headsets and keyboards such as the K3 V2, when macOS reports their battery
-- 🔌 **Wired Keychron (experimental)** - Opens the raw HID interface over USB; no battery reply is decoded yet
+- 🔌 **USB Cable State** - A Keychron keyboard paired over Bluetooth shows `USB` while on its cable. Keychron's firmware doesn't report the battery over USB, so no percentage is shown there
 - 🌓 **Dark Mode Support** - Menu bar icon adapts to system appearance
 
 ## Requirements
@@ -295,9 +295,9 @@ KeychronBattery/
 ├── BluetoothBatteryHelper.swift    # Bluetooth LE devices (CoreBluetooth)
 ├── ClassicBatteryMonitor.swift     # Bluetooth Classic devices (IOBluetooth)
 ├── RegistryBatteryMonitor.swift    # Devices that publish BatteryPercent in the IORegistry
-├── HIDManager.swift                # Wired Keychron raw HID (experimental)
+├── WiredKeyboardMonitor.swift      # Keychron keyboards plugged in over USB (cable state only)
 ├── Info.plist                      # App configuration and permissions
-├── KeychronBattery.entitlements    # Bluetooth entitlement (sandbox and USB come from build settings)
+├── KeychronBattery.entitlements    # Bluetooth entitlement (the sandbox comes from build settings)
 └── Assets.xcassets/                # App icons and menu bar icon
 ```
 
