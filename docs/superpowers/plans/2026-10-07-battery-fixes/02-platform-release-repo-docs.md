@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the shipped app match what the project claims: runs on macOS 13+, carries the release tag's version, ships without debug entitlements, and is documented correctly. Also clean build artifacts out of git.
+**Goal:** Make the shipped app and its docs agree on one supported OS (macOS 15.0+), carries the release tag's version, ships without debug entitlements, and is documented correctly. Also clean build artifacts out of git.
 
 **Architecture:** Mostly build settings, the release workflow and docs. The only Swift change removes dead pre-macOS-13 code paths. Builds on Part 1 (`01-device-model-k3v2-hid-bluetooth.md`, branch `fix/battery-sources-k3v2`).
 
@@ -12,7 +12,7 @@
 
 ## Facts checked before writing (2026-10-07, this Mac)
 
-- A Release build with `MACOSX_DEPLOYMENT_TARGET=13.0` compiles with no warnings; `vtool -show-build` reports `minos 13.0`.
+- A Release build with `MACOSX_DEPLOYMENT_TARGET=13.0` compiles with no warnings, so no code needs more than 13; 15.0 is a support-policy choice (user decision: macOS 13 is too old to support).
 - `CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO` removes `com.apple.security.get-task-allow`, leaving `app-sandbox`, `device.bluetooth`, `device.usb`.
 - Passing `MARKETING_VERSION=9.9.9` to `xcodebuild` sets `CFBundleShortVersionString` to `9.9.9`.
 - Tracked artifacts: `KeychronBattery_V1.0.7.dmg`, `KeychronBattery.xcodeproj/project.pbxproj.backup`, 3 files under `xcuserdata/`. No shared schemes exist; CI's `-scheme KeychronBattery` relies on xcodebuild's auto-created scheme.
@@ -20,7 +20,8 @@
 
 ## Global Constraints
 
-- Deployment target: `MACOSX_DEPLOYMENT_TARGET = 13.0` (project and target, Debug and Release). `BatteryKit` already declares `.macOS(.v13)`.
+- Deployment target: `MACOSX_DEPLOYMENT_TARGET = 15.0` (project-level Debug and Release; the target inherits). `BatteryKit` platforms become `.macOS(.v15)` to match.
+- README, release notes and badges say `macOS 15.0 or later`.
 - Release tags match `v<MAJOR>.<MINOR>.<PATCH>` with numeric parts only; `CFBundleShortVersionString` is the tag without the `v`.
 - Release signing: no `com.apple.security.get-task-allow`. Debug keeps it (needed to attach the debugger).
 - No git history rewrite. Files are untracked with `git rm --cached`; their past blobs stay in history.
@@ -31,7 +32,7 @@
 
 ## Review Focus
 
-1. **A user on macOS 13 or 14 opens the DMG:** the app launches. We have no such machine; the binary's `minos 13.0` plus no `#available` above 13 is the evidence. Check: Task 1 Step 3 (`vtool`) and Step 2 (grep for availability annotations above 13).
+1. **A user on macOS 15.0–15.6 opens the DMG:** the app launches (today's 15.7 target refuses it). We have no such machine; the binary's `minos 15.0` plus no `#available` above 15 is the evidence. Check: Task 1 Steps 2 and 3.
 2. **Launch at Login after removing the fallbacks:** toggling it registers and unregisters the login item. Check: Task 1 Step 5 (manual, System Settings → General → Login Items).
 3. **A tag the version can't use** (`v1.1.0-beta`, `v1.1`): the release job fails before building, with a message naming the tag. Check: Task 2 Step 2 (the guard script run locally against good and bad tags).
 4. **A fresh clone after untracking `xcuserdata`:** CI's build still finds the `KeychronBattery` scheme. Check: Task 3 Step 5 (build from a clean clone).
@@ -39,11 +40,12 @@
 
 ---
 
-### Task 1: Deployment target 13.0, remove dead fallbacks
+### Task 1: Deployment target 15.0, remove dead fallbacks
 
 **Files:**
 - Modify: `KeychronBattery.xcodeproj/project.pbxproj` (both `MACOSX_DEPLOYMENT_TARGET = 15.7;` lines)
 - Modify: `KeychronBattery/AppDelegate.swift` (`isLaunchAtLoginEnabled`, `enableLaunchAtLogin`, `disableLaunchAtLogin`)
+- Modify: `BatteryKit/Package.swift` (`platforms`)
 
 **Interfaces:**
 - Consumes: nothing.
@@ -51,19 +53,19 @@
 
 No unit test can reach `SMAppService`; this task is verified by build, binary inspection and a manual toggle.
 
-- [ ] **Step 1: Set `MACOSX_DEPLOYMENT_TARGET = 13.0` on both lines; replace each launch-at-login function body with its `SMAppService.mainApp` branch only**
+- [ ] **Step 1: Set `MACOSX_DEPLOYMENT_TARGET = 15.0` on both lines and `platforms: [.macOS(.v15)]` in `BatteryKit/Package.swift`; replace each launch-at-login function body with its `SMAppService.mainApp` branch only**
 
 Drop the `#available` checks, the `launchctl` `Process` fallback, `SMLoginItemSetEnabled`, and the now-unused `bundleId` guards. Keep the existing log lines.
 
 - [ ] **Step 2: Check nothing needs a newer OS**
 
-Run: `grep -rnE "#available|@available\(macOS (1[4-9]|2[0-9])" KeychronBattery BatteryKit/Sources`
+Run: `grep -rnE "#available|@available\(macOS (1[6-9]|2[0-9])" KeychronBattery BatteryKit/Sources`
 Expected: no output.
 
 - [ ] **Step 3: Build and inspect the binary**
 
 Run the app build command, then `vtool -show-build build/Build/Products/Release/KeychronBattery.app/Contents/MacOS/KeychronBattery | grep minos` and `plutil -p build/Build/Products/Release/KeychronBattery.app/Contents/Info.plist | grep LSMinimumSystemVersion`.
-Expected: `** BUILD SUCCEEDED **` with no Swift or SwiftLint warnings; `minos 13.0`; `"LSMinimumSystemVersion" => "13.0"`.
+Expected: `** BUILD SUCCEEDED **` with no Swift or SwiftLint warnings; `minos 15.0`; `"LSMinimumSystemVersion" => "15.0"`.
 
 - [ ] **Step 4: Run `swift test --package-path BatteryKit`**
 
@@ -77,7 +79,7 @@ Launch the built app, click Launch at Login. Expected: checkmark on; the app app
 
 ```bash
 git add KeychronBattery.xcodeproj/project.pbxproj KeychronBattery/AppDelegate.swift
-git commit -m "chore: target macOS 13 and drop unreachable login item fallbacks"
+git commit -m "chore: target macOS 15.0 and drop unreachable login item fallbacks"
 ```
 
 ---
@@ -112,7 +114,7 @@ Expected: `v1.0.8 → 1.0.8 (exit 0)`, `v12.3.45 → 12.3.45 (exit 0)`, and exit
 - New step before `Build app`: `swift test --package-path BatteryKit`.
 - `Build app`: add `MARKETING_VERSION=${{ steps.get_version.outputs.MARKETING }} CURRENT_PROJECT_VERSION=${{ github.run_number }}`.
 - `Verify app bundle`: fail the job if `CFBundleShortVersionString` differs from `MARKETING`, or if `codesign -d --entitlements - --xml` output contains `get-task-allow`.
-- Release notes: requirements `macOS 13.0 or later`; requirement line `Keychron keyboard with Bluetooth` becomes `A Keychron keyboard, or any Bluetooth device that reports its battery`; add feature line `🎧 Headsets and other Bluetooth Classic devices`.
+- Release notes: requirements `macOS 15.0 or later`; requirement line `Keychron keyboard with Bluetooth` becomes `A Keychron keyboard, or any Bluetooth device that reports its battery`; add feature line `🎧 Headsets and other Bluetooth Classic devices`.
 
 - [ ] **Step 5: Check the workflow parses**
 
@@ -190,8 +192,8 @@ Expected: `** BUILD SUCCEEDED **`, proving the auto-created scheme works without
 
 - [ ] **Step 1: Write the failing check for the known-wrong statements**
 
-Run: `grep -nE 'main\.swift|build/Release/KeychronBattery\.app' README.md`
-Expected now: 3 matches (lines 107, 182, 281).
+Run: `grep -nE 'main\.swift|build/Release/KeychronBattery\.app|13\.0|Xcode 14' README.md`
+Expected now: 9 matches.
 
 - [ ] **Step 2: Fix the README**
 
@@ -201,7 +203,7 @@ Expected now: 3 matches (lines 107, 182, 281).
 - Add a "Running tests" section: `swift test --package-path BatteryKit`.
 - Releases: say the version comes from the tag and that tags must be `vMAJOR.MINOR.PATCH`.
 - Troubleshooting: add "A Bluetooth device doesn't show" → check `system_profiler SPBluetoothDataType` for a `Battery Level:` line; without one macOS has no level to share.
-- Requirements stay `macOS 13.0 or later` (true after Task 1).
+- Every `13.0` (badge URL, Requirements twice, Technical Details) becomes `15.0`; Requirements' `Xcode 14.0 or later` becomes `Xcode 16.0 or later`.
 
 - [ ] **Step 3: Update the Bluetooth usage strings**
 
