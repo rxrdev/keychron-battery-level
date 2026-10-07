@@ -3,9 +3,9 @@
 <plist version="1.0">
 	<dict>
 		<key>NSBluetoothAlwaysUsageDescription</key>
-		<string>This app needs Bluetooth access to monitor your Keychron keyboard's battery level.</string>
+		<string>This app needs Bluetooth access to show the battery level of your keyboard and other Bluetooth devices.</string>
 		<key>NSBluetoothPeripheralUsageDescription</key>
-		<string>This app needs Bluetooth access to monitor your Keychron keyboard's battery level.</string>
+		<string>This app needs Bluetooth access to show the battery level of your keyboard and other Bluetooth devices.</string>
 		<key>LSUIElement</key>
 		<true />
 	</dict>

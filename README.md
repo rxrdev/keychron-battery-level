@@ -2,7 +2,7 @@
 
 A lightweight macOS menu bar application that displays the battery level of your Keychron keyboard and other Bluetooth peripherals in real-time.
 
-![Menu Bar Preview](https://img.shields.io/badge/macOS-13.0+-blue.svg)
+![Menu Bar Preview](https://img.shields.io/badge/macOS-15.0+-blue.svg)
 
 ![Preview](./image.png)
 
@@ -15,13 +15,15 @@ A lightweight macOS menu bar application that displays the battery level of your
 - 🔄 **Auto-refresh** - Updates battery level every 5 minutes automatically
 - 🚀 **Launch at Login** - Optional setting to start the app automatically when you log in
 - 📡 **Bluetooth & HID** - Uses CoreBluetooth and IOKit (HID) to communicate with devices
+- 🎧 **Bluetooth Classic Devices** - Headsets and keyboards such as the K3 V2, when macOS reports their battery
+- 🔌 **Wired Keychron (experimental)** - Opens the raw HID interface over USB; no battery reply is decoded yet
 - 🌓 **Dark Mode Support** - Menu bar icon adapts to system appearance
 
 ## Requirements
 
-- macOS 13.0 or later
-- Xcode 14.0 or later (for building)
-- Keychron keyboard with Bluetooth connectivity
+- macOS 15.0 or later
+- Xcode 16.0 or later (for building)
+- A Keychron keyboard, or any Bluetooth device that reports its battery to macOS
 
 ## Installation
 
@@ -56,8 +58,8 @@ The battery level updates automatically every 5 minutes and displays as:
 
 ### Prerequisites
 
-- macOS 13.0 or later
-- Xcode 14.0 or later
+- macOS 15.0 or later
+- Xcode 16.0 or later
 - Apple Developer account (for code signing)
 
 ### Build Steps
@@ -88,6 +90,13 @@ The battery level updates automatically every 5 minutes and displays as:
    - Press `⌘R` or click the Run button
    - Grant Bluetooth permissions when prompted
 
+### Running Tests
+
+The battery logic lives in the `BatteryKit` Swift package and has unit tests:
+```bash
+swift test --package-path BatteryKit
+```
+
 ### Debug Build
 
 For development and testing:
@@ -99,12 +108,12 @@ xcodebuild -project KeychronBattery.xcodeproj -scheme KeychronBattery -configura
 
 For distribution:
 ```bash
-xcodebuild -project KeychronBattery.xcodeproj -scheme KeychronBattery -configuration Release
+xcodebuild -project KeychronBattery.xcodeproj -scheme KeychronBattery -configuration Release -derivedDataPath ./build
 ```
 
 The compiled app will be located at:
 ```
-build/Release/KeychronBattery.app
+build/Build/Products/Release/KeychronBattery.app
 ```
 
 ## Creating a Release
@@ -179,7 +188,7 @@ This method creates a more polished DMG with custom styling (requires `create-dm
 3. **Prepare staging directory**
    ```bash
    mkdir -p dmg-staging
-   cp -R build/Release/KeychronBattery.app dmg-staging/
+   cp -R build/Build/Products/Release/KeychronBattery.app dmg-staging/
    ```
 
 4. **Create styled DMG**
@@ -245,7 +254,8 @@ The project includes automated releases using GitHub Actions. When you push a ve
    ```
 
 3. **GitHub Actions will automatically**:
-   - Build the app for macOS
+   - Run the `BatteryKit` tests
+   - Build the app for macOS, with the version taken from the tag (`v1.0.0` → `1.0.0`)
    - Create a DMG file named `KeychronBattery-v1.0.0.dmg`
    - Create a GitHub release with the DMG attached
    - Add release notes automatically
@@ -254,7 +264,7 @@ The project includes automated releases using GitHub Actions. When you push a ve
 
 ### Version Numbering
 
-Follow semantic versioning (MAJOR.MINOR.PATCH):
+Tags must be `vMAJOR.MINOR.PATCH` with numbers only; the release fails on anything else (`v1.1`, `v1.1.0-beta`). Follow semantic versioning:
 - `v1.0.0` - Initial release
 - `v1.0.1` - Bug fixes
 - `v1.1.0` - New features (backwards compatible)
@@ -274,14 +284,17 @@ If you prefer not to use GitHub Actions, you can create releases manually:
 ## Project Structure
 
 ```
+BatteryKit/                         # Swift package: battery logic and unit tests (no hardware needed)
 KeychronBattery/
-├── AppDelegate.swift              # Main app delegate and menu bar setup
-├── BluetoothBatteryHelper.swift   # CoreBluetooth battery monitoring
-├── HIDManager.swift               # HID device management (alternative method)
-├── main.swift                     # App entry point
-├── Info.plist                     # App configuration and permissions
-├── KeychronBattery.entitlements   # Bluetooth entitlements
-└── Assets.xcassets/               # App icons and menu bar icon
+├── AppDelegate.swift               # Entry point, timers, launch at login
+├── StatusMenuController.swift      # Menu bar item and menu
+├── BluetoothBatteryHelper.swift    # Bluetooth LE devices (CoreBluetooth)
+├── ClassicBatteryMonitor.swift     # Bluetooth Classic devices (IOBluetooth)
+├── RegistryBatteryMonitor.swift    # Devices that publish BatteryPercent in the IORegistry
+├── HIDManager.swift                # Wired Keychron raw HID (experimental)
+├── Info.plist                      # App configuration and permissions
+├── KeychronBattery.entitlements    # Sandbox, Bluetooth and USB entitlements
+└── Assets.xcassets/                # App icons and menu bar icon
 ```
 
 ## Troubleshooting
@@ -292,6 +305,14 @@ KeychronBattery/
 - Check that Bluetooth is enabled on your Mac
 - Try clicking "Refresh Battery" from the menu
 - Verify the app has Bluetooth permissions in System Settings → Privacy & Security → Bluetooth
+
+### A Bluetooth Device Doesn't Show
+
+The app can only show a level macOS already has. Run:
+```bash
+system_profiler SPBluetoothDataType
+```
+If the device has no `Battery Level:` line there, macOS has no battery level for it to share.
 
 ### App Doesn't Launch at Login
 
@@ -307,9 +328,9 @@ KeychronBattery/
 ## Technical Details
 
 - **Language**: Swift
-- **Frameworks**: CoreBluetooth, IOKit, ServiceManagement
+- **Frameworks**: CoreBluetooth, IOBluetooth, IOKit, ServiceManagement
 - **Architecture**: Universal (Apple Silicon & Intel)
-- **Minimum Target**: macOS 13.0
+- **Minimum Target**: macOS 15.0
 
 ## License
 
