@@ -24,6 +24,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var startupRetryCount = 0
 
     static func main() {
+        if CommandLine.arguments.contains(ClassicBatteryMonitor.snapshotArgument) {
+            ClassicBatteryMonitor.printSnapshot()
+            exit(0)
+        }
+
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
@@ -43,6 +48,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             self.bluetoothMonitor.start()
+            self.classicMonitor.start()
             self.scheduleStartupRetries()
         }
 
