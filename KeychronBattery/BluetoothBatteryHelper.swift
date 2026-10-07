@@ -6,7 +6,7 @@ import os
 class BluetoothBatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "dev.rrazvan.keychron.battery", category: "BluetoothMonitor")
     private var centralManager: CBCentralManager!
-    private var connectedPeripherals: [UUID: CBPeripheral] = [:]
+    private var trackedPeripherals: [UUID: CBPeripheral] = [:]
 
     private let batteryServiceUUID = CBUUID(string: "180F")
     private let batteryLevelCharacteristicUUID = CBUUID(string: "2A19")
@@ -51,20 +51,6 @@ class BluetoothBatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralD
         }
     }
 
-    func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
-        let name = peripheral.name ?? "Unknown"
-
-        // Check if device is connectable
-        if let isConnectable = advertisementData[CBAdvertisementDataIsConnectable] as? NSNumber, isConnectable.boolValue == false {
-            return
-        }
-
-        if shouldTrackDevice(peripheral) && connectedPeripherals[peripheral.identifier] == nil {
-            logger.info("✅ Found device: \(name)")
-            connectToPeripheral(peripheral)
-        }
-    }
-
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         logger.info("🔗 Connected to \(peripheral.name ?? "device")")
         peripheral.delegate = self
@@ -75,15 +61,14 @@ class BluetoothBatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralD
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         logger.error("❌ Failed to connect to \(peripheral.name ?? "device"): \(error?.localizedDescription ?? "Unknown error")")
-        connectedPeripherals.removeValue(forKey: peripheral.identifier)
+        trackedPeripherals.removeValue(forKey: peripheral.identifier)
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         logger.info("❌ Disconnected from \(peripheral.name ?? "device")")
-        connectedPeripherals.removeValue(forKey: peripheral.identifier)
         notifyBatteryUpdate(uuid: peripheral.identifier.uuidString, name: peripheral.name ?? "Unknown", level: nil)
 
-        // Try to reconnect
+        // Stay tracked and reconnect; CoreBluetooth completes it when the device returns
         centralManager.connect(peripheral, options: nil)
     }
 
@@ -148,7 +133,7 @@ class BluetoothBatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralD
     }
 
     private func connectToPeripheral(_ peripheral: CBPeripheral) {
-        connectedPeripherals[peripheral.identifier] = peripheral
+        trackedPeripherals[peripheral.identifier] = peripheral
         centralManager.connect(peripheral, options: nil)
     }
 
@@ -178,7 +163,7 @@ class BluetoothBatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralD
         if let central = centralManager, central.state == .poweredOn {
             let systemConnected = central.retrieveConnectedPeripherals(withServices: commonServices)
             for peripheral in systemConnected {
-                if shouldTrackDevice(peripheral) && connectedPeripherals[peripheral.identifier] == nil {
+                if shouldTrackDevice(peripheral) && trackedPeripherals[peripheral.identifier] == nil {
                     logger.info("🔄 Found new system-connected peripheral: \(peripheral.name ?? "Unknown")")
                     connectToPeripheral(peripheral)
                 }
@@ -186,21 +171,25 @@ class BluetoothBatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralD
         }
 
         // 2. Refresh data for all connected devices
-        for peripheral in connectedPeripherals.values {
-            if peripheral.state == .connected {
-                if let services = peripheral.services {
-                    for service in services where service.uuid == batteryServiceUUID {
-                        if let characteristics = service.characteristics {
-                            for characteristic in characteristics where characteristic.uuid == batteryLevelCharacteristicUUID {
-                                peripheral.readValue(for: characteristic)
-                            }
-                        }
-                    }
-                }
-            } else {
+        for peripheral in trackedPeripherals.values {
+            switch peripheral.state {
+            case .connected:
+                readBatteryLevel(of: peripheral)
+            case .disconnected:
                 centralManager.connect(peripheral, options: nil)
+            default:
+                // Already connecting; connecting again would deliver didConnect twice
+                break
             }
         }
 
+    }
+
+    private func readBatteryLevel(of peripheral: CBPeripheral) {
+        for service in peripheral.services ?? [] where service.uuid == batteryServiceUUID {
+            for characteristic in service.characteristics ?? [] where characteristic.uuid == batteryLevelCharacteristicUUID {
+                peripheral.readValue(for: characteristic)
+            }
+        }
     }
 }
