@@ -23,7 +23,14 @@ jobs:
       
       - name: Get version from tag
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          MARKETING="$(sh scripts/version-from-tag.sh "$VERSION")"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "MARKETING=$MARKETING" >> $GITHUB_OUTPUT
+      
+      - name: Run BatteryKit tests
+        run: swift test --package-path BatteryKit
       
       - name: Build app
         run: |
@@ -33,13 +40,26 @@ jobs:
                      -derivedDataPath ./build \
                      CODE_SIGN_IDENTITY="-" \
                      CODE_SIGNING_REQUIRED=YES \
-                     CODE_SIGNING_ALLOWED=YES
+                     CODE_SIGNING_ALLOWED=YES \
+                     MARKETING_VERSION=${{ steps.get_version.outputs.MARKETING }} \
+                     CURRENT_PROJECT_VERSION=${{ github.run_number }}
       
       - name: Verify app bundle
         run: |
           ls -lh build/Build/Products/Release/KeychronBattery.app/Contents/MacOS/
           file build/Build/Products/Release/KeychronBattery.app/Contents/MacOS/KeychronBattery
           du -sh build/Build/Products/Release/KeychronBattery.app
+          
+          APP=build/Build/Products/Release/KeychronBattery.app
+          BUILT=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")
+          if [ "$BUILT" != "${{ steps.get_version.outputs.MARKETING }}" ]; then
+            echo "error: app version $BUILT does not match tag ${{ steps.get_version.outputs.VERSION }}"
+            exit 1
+          fi
+          if codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q get-task-allow; then
+            echo "error: Release build carries com.apple.security.get-task-allow"
+            exit 1
+          fi
       
       - name: Install create-dmg
         run: brew install create-dmg
@@ -82,11 +102,12 @@ jobs:
           4. Launch and grant Bluetooth permissions
           
           ### Requirements
-          - macOS 13.0 or later
-          - Keychron keyboard with Bluetooth
+          - macOS 15.0 or later
+          - A Keychron keyboard, or any Bluetooth device that reports its battery
           
           ### Features
           - 🔋 Real-time battery monitoring in menu bar
+          - 🎧 Headsets and other Bluetooth Classic devices
           - 🎨 Color-coded battery level display
           - 🔄 Auto-refresh every 5 minutes
           - 🚀 Launch at login option
