@@ -16,6 +16,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     let bluetoothMonitor = BluetoothBatteryMonitor()
     let hidManager = HIDManager()
+    let registryMonitor = RegistryBatteryMonitor()
 
     var statusMenuController: StatusMenuController?
 
@@ -69,6 +70,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         logger.info("Refreshing battery status...")
         bluetoothMonitor.requestBatteryUpdate()
         hidManager.requestBatteryUpdate()
+        registryMonitor.requestBatteryUpdate()
     }
 
     func isLaunchAtLoginEnabled() -> Bool {

@@ -22,10 +22,13 @@ public struct DeviceStore {
 
     public init() {}
 
+    /// An empty name keeps the stored one; for an unknown id it is ignored.
     public mutating func apply(_ reading: BatteryReading) {
+        guard let name = reading.name.isEmpty ? entries[reading.id]?.device.name : reading.name else { return }
+
         sequence += 1
         let level = reading.level.flatMap { (0...100).contains($0) ? $0 : nil }
-        entries[reading.id] = Entry(device: Device(id: reading.id, name: reading.name, level: level), sequence: sequence)
+        entries[reading.id] = Entry(device: Device(id: reading.id, name: name, level: level), sequence: sequence)
     }
 
     /// One device per name, sorted by name. A connected source wins over a

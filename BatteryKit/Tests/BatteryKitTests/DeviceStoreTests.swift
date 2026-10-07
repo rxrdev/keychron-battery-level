@@ -41,3 +41,16 @@ import Testing
 func tierThresholds(level: Int, tier: BatteryTier) {
     #expect(BatteryTier(level: level) == tier)
 }
+
+@Test func emptyNameKeepsStoredName() {
+    var store = DeviceStore()
+    store.apply(BatteryReading(id: "a", name: "Keychron K3", level: 72))
+    store.apply(BatteryReading(id: "a", name: "", level: nil))
+    #expect(store.visibleDevices == [Device(id: "a", name: "Keychron K3", level: nil)])
+}
+
+@Test func emptyNameForUnknownIdIsIgnored() {
+    var store = DeviceStore()
+    store.apply(BatteryReading(id: "a", name: "", level: nil))
+    #expect(store.visibleDevices.isEmpty)
+}
